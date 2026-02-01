@@ -13,9 +13,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Verify Python
         run: |
           python3 --version
+          which python3
 
       - name: Create backend directory
         run: |
@@ -26,15 +27,19 @@ jobs:
         run: |
           rsync -av --delete aws/backend/ /opt/backend/
 
-      - name: Install dependencies
+      - name: Create virtual environment & install deps
         run: |
           cd /opt/backend
-          python3 -m venv venv || true
+
+          if [ ! -d "venv" ]; then
+            python3 -m venv venv
+          fi
+
           source venv/bin/activate
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Restart backend service
+      - name: Restart backend
         run: |
           sudo pkill -f app.py || true
           cd /opt/backend
