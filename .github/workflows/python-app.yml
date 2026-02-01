@@ -1,0 +1,42 @@
+name: Deploy Backend to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        run: |
+          python3 --version
+
+      - name: Create backend directory
+        run: |
+          sudo mkdir -p /opt/backend
+          sudo chown -R ubuntu:ubuntu /opt/backend
+
+      - name: Deploy backend code
+        run: |
+          rsync -av --delete aws/backend/ /opt/backend/
+
+      - name: Install dependencies
+        run: |
+          cd /opt/backend
+          python3 -m venv venv || true
+          source venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Restart backend service
+        run: |
+          sudo pkill -f app.py || true
+          cd /opt/backend
+          source venv/bin/activate
+          nohup python app.py > app.log 2>&1 &
