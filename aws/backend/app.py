@@ -1,5 +1,39 @@
 from flask import Flask, request, jsonify
 from db_utils import insert_machine_state, get_latest_state
+from dotenv import load_dotenv
+import os
+import mysql.connector
+import os
+
+load_dotenv()
+
+# 2. Read values from .env
+DB_HOST = os.getenv("DB_HOST")
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
+DB_NAME = os.getenv("DB_NAME")
+DB_PORT = int(os.getenv("DB_PORT"))
+
+# 3. Create MySQL connection
+try:
+    db = mysql.connector.connect(
+        host=DB_HOST,
+        user=DB_USER,
+        password=DB_PASSWORD,
+        database=DB_NAME,
+        port=DB_PORT
+    )
+    print("✅ MySQL connected successfully")
+
+except mysql.connector.Error as err:
+    print("❌ MySQL connection failed")
+    print(err)
+    exit(1)
+
+# 4. Example query (test)
+cursor = db.cursor()
+cursor.execute("SHOW TABLES;")
+print("📦 Tables:", cursor.fetchall())
 
 app = Flask(__name__)
 
