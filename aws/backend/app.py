@@ -1,26 +1,29 @@
 from flask import Flask, request, jsonify
-from db_utils import insert_machine_state, get_latest_state
 from dotenv import load_dotenv
+from pathlib import Path
 import os
 import mysql.connector
-import os
+
+from db_utils import insert_machine_state, get_latest_state
+
+# =========================
+# Load .env safely
+# =========================
 env_path = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(env_path)
 
-print("DB_HOST =", os.getenv("DB_HOST"))
-print("DB_USER =", os.getenv("DB_USER"))
-print("DB_PASSWORD =", os.getenv("DB_PASSWORD"))
-print("DB_NAME =", os.getenv("DB_NAME"))
-load_dotenv()
-
-# 2. Read values from .env
+# =========================
+# Read env variables
+# =========================
 DB_HOST = os.getenv("DB_HOST")
 DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_NAME = os.getenv("DB_NAME")
 DB_PORT = int(os.getenv("DB_PORT"))
 
-# 3. Create MySQL connection
+# =========================
+# Connect to MySQL
+# =========================
 try:
     db = mysql.connector.connect(
         host=DB_HOST,
@@ -30,17 +33,14 @@ try:
         port=DB_PORT
     )
     print("✅ MySQL connected successfully")
-
 except mysql.connector.Error as err:
     print("❌ MySQL connection failed")
     print(err)
     exit(1)
 
-# 4. Example query (test)
-cursor = db.cursor()
-cursor.execute("SHOW TABLES;")
-print("📦 Tables:", cursor.fetchall())
-
+# =========================
+# Flask app
+# =========================
 app = Flask(__name__)
 
 @app.route("/upload_sensor", methods=["POST"])
@@ -61,4 +61,4 @@ def machine_state():
     return jsonify(state) if state else ("No data", 404)
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000 )
+    app.run(host="0.0.0.0", port=5000)
