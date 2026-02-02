@@ -10,6 +10,12 @@ jobs:
     runs-on: self-hosted
 
     steps:
+      # FIX: This step handles the EACCES error by taking ownership 
+      # of the workspace before the checkout action tries to delete it.
+      - name: Pre-cleanup permissions
+        run: |
+          sudo chown -R $USER:$USER ${{ github.workspace }}
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -30,18 +36,23 @@ jobs:
       - name: Create virtual environment & install deps
         run: |
           cd /opt/backend
-
           if [ ! -d "venv" ]; then
             python3 -m venv venv
           fi
-
           source venv/bin/activate
           pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: Restart backend
         run: |
+          # Kill existing process
           sudo pkill -f app.py || true
+          
           cd /opt/backend
           source venv/bin/activate
-          nohup python app.py > app.log 2>&1 &
+          
+          # Use 'nohup' and ensure the log file is writable by the ubuntu user
+          # We use 'disown' to ensure the process keeps running after the shell exits
+          nohup python3 app.py > app.log 2>&1 & 
+          sleep 2
+          disown
