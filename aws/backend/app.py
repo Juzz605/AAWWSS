@@ -21,6 +21,12 @@ DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_NAME = os.getenv("DB_NAME")
 DB_PORT = int(os.getenv("DB_PORT"))
 
+print("DEBUG FROM PYTHON")
+print("DB_HOST =", repr(DB_HOST))
+print("DB_USER =", repr(DB_USER))
+print("DB_PASSWORD =", repr(DB_PASSWORD))
+print("DB_NAME =", repr(DB_NAME))
+print("DB_PORT =", repr(DB_PORT))
 # =========================
 # Connect to MySQL
 # =========================
