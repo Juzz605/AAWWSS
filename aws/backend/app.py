@@ -1,7 +1,6 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import numpy as np
-import time
 
 app = Flask(__name__)
 CORS(app)
@@ -27,6 +26,7 @@ WEIGHTS = {
 WINDOW = 30
 machines = {}
 
+# ---------- HELPERS ----------
 def normalize(sensor, value):
     low, high = SENSORS[sensor]
     return ((value - low) / (high - low)) * 100
@@ -39,18 +39,22 @@ def estimate_rul(risk):
     if risk < 70: return "Medium (10–30 days)"
     return "Low (<10 days)"
 
+# ---------- INGEST ----------
 @app.route("/ingest", methods=["POST"])
 def ingest():
     data = request.json
+
+    if not data or "machine_id" not in data or "sensor_values" not in data:
+        return jsonify({"error": "Invalid payload"}), 400
+
     machine_id = data["machine_id"]
+    values = data["sensor_values"]
 
     if machine_id not in machines:
         machines[machine_id] = {
             "sensor_history": {s: [] for s in SENSORS},
             "risk_history": []
         }
-
-    values = data["sensor_values"]
 
     for s in values:
         machines[machine_id]["sensor_history"][s].append(values[s])
@@ -60,8 +64,9 @@ def ingest():
     machines[machine_id]["risk_history"].append(risk)
     machines[machine_id]["risk_history"] = machines[machine_id]["risk_history"][-WINDOW:]
 
-    return jsonify({"status": "ok"}), 200
+    return jsonify({"status": "ok", "risk": risk}), 200
 
+# ---------- LIVE ----------
 @app.route("/live/<machine_id>")
 def live(machine_id):
     if machine_id not in machines:
@@ -83,5 +88,6 @@ def live(machine_id):
         "risk_history": machines[machine_id]["risk_history"]
     })
 
+# ---------- RUN ----------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
