@@ -1,70 +1,87 @@
-from flask import Flask, request, jsonify
-from dotenv import load_dotenv
-from pathlib import Path
-import os
-import mysql.connector
+from flask import Flask, jsonify, request
+from flask_cors import CORS
+import numpy as np
+import time
 
-from db_utils import insert_machine_state, get_latest_state
-
-# =========================
-# Load .env safely
-# =========================
-env_path = Path(__file__).resolve().parent.parent / ".env"
-load_dotenv(env_path)
-
-# =========================
-# Read env variables
-# =========================
-DB_HOST = os.getenv("DB_HOST")
-DB_USER = os.getenv("DB_USER")
-DB_PASSWORD = os.getenv("DB_PASSWORD")
-DB_NAME = os.getenv("DB_NAME")
-DB_PORT = int(os.getenv("DB_PORT"))
-
-print("DEBUG FROM PYTHON")
-print("DB_HOST =", repr(DB_HOST))
-print("DB_USER =", repr(DB_USER))
-print("DB_PASSWORD =", repr(DB_PASSWORD))
-print("DB_NAME =", repr(DB_NAME))
-print("DB_PORT =", repr(DB_PORT))
-# =========================
-# Connect to MySQL
-# =========================
-try:
-    db = mysql.connector.connect(
-        host=DB_HOST,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        database=DB_NAME,
-        port=DB_PORT
-    )
-    print("✅ MySQL connected successfully")
-except mysql.connector.Error as err:
-    print("❌ MySQL connection failed")
-    print(err)
-    exit(1)
-
-# =========================
-# Flask app
-# =========================
 app = Flask(__name__)
+CORS(app)
 
-@app.route("/upload_sensor", methods=["POST"])
-def upload_sensor():
+SENSORS = {
+    "temperature": (30, 120),
+    "vibration": (0, 15),
+    "current": (5, 60),
+    "acoustic": (10, 100),
+    "oil_quality": (0, 100),
+    "pressure": (20, 120)
+}
+
+WEIGHTS = {
+    "temperature": 0.20,
+    "vibration": 0.25,
+    "current": 0.15,
+    "acoustic": 0.15,
+    "oil_quality": 0.15,
+    "pressure": 0.10
+}
+
+WINDOW = 30
+machines = {}
+
+def normalize(sensor, value):
+    low, high = SENSORS[sensor]
+    return ((value - low) / (high - low)) * 100
+
+def calculate_risk(values):
+    return round(sum(normalize(s, values[s]) * WEIGHTS[s] for s in values), 2)
+
+def estimate_rul(risk):
+    if risk < 40: return "High (>30 days)"
+    if risk < 70: return "Medium (10–30 days)"
+    return "Low (<10 days)"
+
+@app.route("/ingest", methods=["POST"])
+def ingest():
     data = request.json
-    insert_machine_state(
-        machine_id=data.get("machine_id", "machine01"),
-        temperature=data["temperature"],
-        vibration=data["vibration"],
-        health="Normal"
-    )
-    return jsonify({"status": "stored"})
+    machine_id = data["machine_id"]
 
-@app.route("/machine_state", methods=["GET"])
-def machine_state():
-    machine_id = request.args.get("machine_id", "machine01")
-    state = get_latest_state(machine_id)
-    return jsonify(state) if state else ("No data", 404)
+    if machine_id not in machines:
+        machines[machine_id] = {
+            "sensor_history": {s: [] for s in SENSORS},
+            "risk_history": []
+        }
+
+    values = data["sensor_values"]
+
+    for s in values:
+        machines[machine_id]["sensor_history"][s].append(values[s])
+        machines[machine_id]["sensor_history"][s] = machines[machine_id]["sensor_history"][s][-WINDOW:]
+
+    risk = calculate_risk(values)
+    machines[machine_id]["risk_history"].append(risk)
+    machines[machine_id]["risk_history"] = machines[machine_id]["risk_history"][-WINDOW:]
+
+    return jsonify({"status": "ok"}), 200
+
+@app.route("/live/<machine_id>")
+def live(machine_id):
+    if machine_id not in machines:
+        return jsonify({"error": "No data yet"}), 404
+
+    values = {s: machines[machine_id]["sensor_history"][s][-1] for s in SENSORS}
+    risk = machines[machine_id]["risk_history"][-1]
+
+    health = "NORMAL"
+    if risk >= 70: health = "CRITICAL"
+    elif risk >= 40: health = "WARNING"
+
+    return jsonify({
+        "machine_id": machine_id,
+        "sensor_values": values,
+        "risk_score": risk,
+        "machine_health": health,
+        "remaining_life": estimate_rul(risk),
+        "risk_history": machines[machine_id]["risk_history"]
+    })
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
