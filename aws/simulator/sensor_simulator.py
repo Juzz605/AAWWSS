@@ -25,5 +25,5 @@ while True:
             "sensor_values": {s: simulate(s) for s in SENSORS}
         }
         requests.post(BACKEND, json=payload)
-        print("Sent:", payload)
+        print("Sent:", payload )
     time.sleep(2)
