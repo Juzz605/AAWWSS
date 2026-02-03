@@ -2,7 +2,7 @@ import requests
 import random
 import time
 
-BACKEND_URL = "http://127.0.0.1:5003/ingest"
+BACKEND_URL = "http://127.0.0.1:5000/ingest"
 MACHINE_ID = "M101"
 
 def generate_sensor_data():
