@@ -3,7 +3,7 @@ import random
 import time
 
 BACKEND_URL = "http://127.0.0.1:5000/ingest"
-MACHINE_ID = "M101"
+MACHINE_ID = "Machine_01"
 
 def generate_sensor_data():
     return {
@@ -27,4 +27,4 @@ while True:
     except Exception as e:
         print("Error:", e)
 
-    time.sleep(2)
+    time.sleep(5)
