@@ -7,7 +7,7 @@ app = Flask(__name__)
 CORS(app)
 
 # ---------------- CONFIG ----------------
-REGION = "us-east-1"   # change if needed
+REGION = "ap-south-1"  # change if needed
 NAMESPACE = "MachineMonitoring"
 WINDOW = 30
 
