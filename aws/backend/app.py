@@ -1,9 +1,15 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+import boto3
 import numpy as np
 
 app = Flask(__name__)
 CORS(app)
+
+# ---------------- CONFIG ----------------
+REGION = "us-east-1"   # change if needed
+NAMESPACE = "MachineMonitoring"
+WINDOW = 30
 
 SENSORS = {
     "temperature": (30, 120),
@@ -23,10 +29,12 @@ WEIGHTS = {
     "pressure": 0.10
 }
 
-WINDOW = 30
 machines = {}
 
-# ---------- HELPERS ----------
+# CloudWatch client (uses EC2 IAM Role automatically)
+cloudwatch = boto3.client("cloudwatch", region_name=REGION)
+
+# ---------------- HELPERS ----------------
 def normalize(sensor, value):
     low, high = SENSORS[sensor]
     return ((value - low) / (high - low)) * 100
@@ -35,18 +43,16 @@ def calculate_risk(values):
     return round(sum(normalize(s, values[s]) * WEIGHTS[s] for s in values), 2)
 
 def estimate_rul(risk):
-    if risk < 40: return "High (>30 days)"
-    if risk < 70: return "Medium (10–30 days)"
+    if risk < 40:
+        return "High (>30 days)"
+    if risk < 70:
+        return "Medium (10–30 days)"
     return "Low (<10 days)"
 
-# ---------- INGEST ----------
+# ---------------- INGEST ROUTE ----------------
 @app.route("/ingest", methods=["POST"])
 def ingest():
     data = request.json
-
-    if not data or "machine_id" not in data or "sensor_values" not in data:
-        return jsonify({"error": "Invalid payload"}), 400
-
     machine_id = data["machine_id"]
     values = data["sensor_values"]
 
@@ -56,17 +62,42 @@ def ingest():
             "risk_history": []
         }
 
+    # Store history
     for s in values:
         machines[machine_id]["sensor_history"][s].append(values[s])
         machines[machine_id]["sensor_history"][s] = machines[machine_id]["sensor_history"][s][-WINDOW:]
 
+    # Calculate risk
     risk = calculate_risk(values)
     machines[machine_id]["risk_history"].append(risk)
     machines[machine_id]["risk_history"] = machines[machine_id]["risk_history"][-WINDOW:]
 
-    return jsonify({"status": "ok", "risk": risk}), 200
+    # Push to CloudWatch
+    metric_data = []
 
-# ---------- LIVE ----------
+    for s in values:
+        metric_data.append({
+            "MetricName": s.capitalize(),
+            "Dimensions": [{"Name": "MachineId", "Value": machine_id}],
+            "Value": values[s]
+        })
+
+    metric_data.append({
+        "MetricName": "HealthScore",
+        "Dimensions": [{"Name": "MachineId", "Value": machine_id}],
+        "Value": risk,
+        "Unit": "Percent"
+    })
+
+    cloudwatch.put_metric_data(
+        Namespace=NAMESPACE,
+        MetricData=metric_data
+    )
+
+    return jsonify({"status": "ok"}), 200
+
+
+# ---------------- LIVE ROUTE ----------------
 @app.route("/live/<machine_id>")
 def live(machine_id):
     if machine_id not in machines:
@@ -76,8 +107,10 @@ def live(machine_id):
     risk = machines[machine_id]["risk_history"][-1]
 
     health = "NORMAL"
-    if risk >= 70: health = "CRITICAL"
-    elif risk >= 40: health = "WARNING"
+    if risk >= 70:
+        health = "CRITICAL"
+    elif risk >= 40:
+        health = "WARNING"
 
     return jsonify({
         "machine_id": machine_id,
@@ -88,6 +121,5 @@ def live(machine_id):
         "risk_history": machines[machine_id]["risk_history"]
     })
 
-# ---------- RUN ----------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
